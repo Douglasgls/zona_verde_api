@@ -48,8 +48,8 @@ async def lifespan(app: FastAPI):
     await Tortoise.close_connections()
     
 app = FastAPI(
-    title="EncontraPlaca API",
-    description="API para detecção e validação de placas de veículos no Brasil",
+    title="ZONA-VERDE API",
+    description="API para o gerencimento de reservas",
     version="1.0.0",
     contact={
         "name": "Douglas Paz",
@@ -65,7 +65,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,            # URLs permitidas
+    allow_origins=["*"],            # URLs permitidas
     allow_credentials=True,           # se quiser permitir cookies/autenticação
     allow_methods=["*"],              # métodos permitidos (GET, POST, etc)
     allow_headers=["*"],              # headers permitidos

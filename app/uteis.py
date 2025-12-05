@@ -69,13 +69,29 @@ def distancia_ponderada(plate_valid: str, plate_ocr: str) -> dict:
     Retorna dicionário com pontuação total, similaridade e detalhes.
     """
 
-    if plate_ocr:
-        if len(plate_valid) != TAMANHO_PLACA or len(plate_ocr) != TAMANHO_PLACA:
-            return HTTPException(status_code=400, detail="Placas devem ter exatamente 7 caracteres.")
+    if not plate_ocr:
+        print("OCR falhou: Nenhuma placa detectada.")
+        return {
+            "similaridade": 0.0,
+            "similaridade_pct": 0.0,
+            "custo_total": 0,
+            "detalhes": [{"posicao": 0, "esperado": "N/A", "obtido": "N/A", "explicacao": "OCR não retornou texto"}]
+        }
+    
+    if len(plate_valid) != TAMANHO_PLACA or len(plate_ocr) != TAMANHO_PLACA:
+         print(f"Tamanho inválido: {plate_ocr}")
+         return {
+            "similaridade": 0.0,
+            "similaridade_pct": 0.0,
+            "custo_total": 0,
+            "detalhes": [{"explicacao": f"Tamanho incorreto: {len(plate_ocr)}"}]
+        }
 
     custo_total = 70
     ordemCertaPosAnterior = False
     detalhes = []
+
+    print(f"Comparando placas: válida='{plate_valid}' vs OCR='{plate_ocr}'")
 
     for i in range(TAMANHO_PLACA):
         v = plate_valid[i]
@@ -169,30 +185,30 @@ async def get_plate_text(file) -> dict:
     try:
         await file.seek(0)
         contents = await file.read()
-
         image = Image.open(io.BytesIO(contents)).convert("RGB")
-
         img_np = np.array(image)
 
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)               # Escala de cinza
-        gray = cv2.bilateralFilter(gray, 11, 17, 17)                  # Remoção de ruído suave
-        gray = cv2.equalizeHist(gray)                                 # Equalização de histograma
-        gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)           # Aumenta contraste
-        gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]  # Binarização adaptativa
+        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
-        processed_img = Image.fromarray(gray)
+        height, width = gray.shape
+        fator_aumento = 2
+        gray_resized = cv2.resize(gray, (width * fator_aumento, height * fator_aumento), interpolation=cv2.INTER_CUBIC)
 
-        processed_np = np.array(processed_img)
+        processed_np = cv2.bilateralFilter(gray_resized, 11, 17, 17)
 
         plate = await get_plate_info(processed_np)
+        
+        if plate['plate'] is None:
+             print("DEBUG - Nenhuma placa válida encontrada. Tentando leitura bruta...")
+             reader = easyocr.Reader(['pt'], gpu=False)
+             raw_results = reader.readtext(processed_np)
+             print(f"Leitura bruta EasyOCR: {raw_results}")
 
         return {
             "plate": plate["plate"] if isinstance(plate, dict) and "plate" in plate else plate,
             "confidence": plate.get("confidence", None) if isinstance(plate, dict) else None
         }
 
-    except UnidentifiedImageError:
-        raise ValueError("Erro: arquivo de imagem inválido ou corrompido.")
     except Exception as e:
         print(f"Erro ao processar imagem: {e}")
         raise e
