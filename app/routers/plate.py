@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Form, UploadFile, File, HTTPException, Response
-from app.uteis import distancia_ponderada, save_uploaded_image_as_png, get_plate_text
+from fastapi import APIRouter, Form, UploadFile, File, HTTPException, Response, BackgroundTasks
+from app.uteis import distancia_ponderada, save_image_bytes_as_png, get_plate_text, broadcast_to_websockets, send_initial_state
 from fastapi import WebSocket
 import asyncio
 from app.mqtt_client import mqttc 
@@ -8,8 +8,19 @@ from datetime import datetime
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 import os
+from enum import Enum
+from app.schemas.spot import SpotUpdate, SpotState, SpotAlertStatus
+from concurrent.futures import ThreadPoolExecutor
+from app.models.spot import Spot
+
 
 connections = []
+executor = ThreadPoolExecutor(max_workers=3)
+
+class SpotStatus(str, Enum):
+    LIVRE = "LIVRE"
+    OCUPADO = "OCUPADO"
+    MANUAL = "MANUAL"
 
 router = APIRouter(
     prefix="/plate",
@@ -21,7 +32,9 @@ router = APIRouter(
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connections.append(websocket)
-    print(f"Cliente conectado: {websocket.client}")
+
+    await send_initial_state(websocket)
+
     try:
         while True:
             await asyncio.sleep(1)
@@ -31,69 +44,114 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in connections:
             connections.remove(websocket)
 
+async def process_ocr_and_notify(file_content: bytes, spot_id: str, status: SpotStatus):
+    """
+    Processa a imagem para OCR e notifica os clientes WebSocket.
+    """
+    loop = asyncio.get_running_loop()
+
+    await loop.run_in_executor(executor, save_image_bytes_as_png, file_content, spot_id)
+
+    plate_detected = ""
+    similarity = 0
+    expected_plate = await SpotService.get_expected_plate(int(spot_id))
+
+    print(f"Placa esperada para a vaga {spot_id}: {expected_plate}")
+
+    if status in [SpotStatus.OCUPADO, SpotStatus.MANUAL]:
+        print("Iniciando OCR pesado...")
+        result = await loop.run_in_executor(executor, get_plate_text, file_content)
+        plate_detected = result['plate'] or ""
+        comparison = await loop.run_in_executor(executor, distancia_ponderada, expected_plate, plate_detected)
+        similarity = comparison['similaridade_pct']
+
+        print(f"Placa: {plate_detected} | Similaridade: {similarity}%")
+
+    image_path = f"/plate/last_picture/{spot_id}"
+
+    if similarity < 60 and status in [SpotStatus.OCUPADO, SpotStatus.MANUAL]:
+        await SpotService.update(
+            spot_id,
+            data=SpotUpdate(alert_status=SpotAlertStatus.ACTIVE)
+        )
+    else:
+        await SpotService.update(
+            spot_id,
+            data=SpotUpdate(alert_status=SpotAlertStatus.NONE)
+        )
+
+    payload = {
+        "plate_ocr": plate_detected,
+        "plate_db": expected_plate,
+        "current_status": status.value,
+        "id": spot_id,
+        "similarity": similarity,
+        "image_url": image_path,
+        "is_alert": similarity < 70 and status in [SpotStatus.OCUPADO, SpotStatus.MANUAL],
+        "last_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    print("Notificando clientes WebSocket...")
+
+    await broadcast_to_websockets(payload, connections)
+
 @router.post("/validate")
 async def validate_plate_image(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     id: str = Form(...),
     status: str = Form(...)
 ):
-    if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-        raise HTTPException(status_code=400, detail="Arquivo de imagem inválido.")
+    # if not file.content_type.startswith("image/"):
+    #     raise HTTPException(status_code=400, detail="Arquivo deve ser uma imagem.")
     
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="Nenhuma imagem enviada.")
-    
-    if status.upper() not in ['LIVRE', 'OCUPADO']:
+    try:
+        current_status = SpotStatus(status.upper())
+    except ValueError:
         raise HTTPException(status_code=400, detail="Status inválido.")
+
+    await SpotService.update(
+        id,
+        SpotUpdate(current_status=current_status.value)
+    )
+
+    spot = await SpotService.get_by_id(int(id))
+
+    if not spot:
+        raise HTTPException(status_code=404, detail="Vaga não encontrada.")
+
+    if spot.status != SpotState.RESERVED:
+        await SpotService.update(
+            id,
+            SpotUpdate(current_status=current_status)
+        )
+
+        await broadcast_to_websockets({
+            "id": id,
+            "current_status": current_status.value,
+            "message": "Vaga não reservada, status atualizado sem OCR."
+        }, connections)
+
+        return Response(status_code=202)
     
-    filepath = await save_uploaded_image_as_png(file, id)
 
-    print(filepath)
+    file_content = await file.read()
+    print(f"Tamanho do arquivo recebido: {len(file_content)} bytes")
 
-    plate = await get_plate_text(file)
+    background_tasks.add_task(
+        process_ocr_and_notify,
+        file_content,
+        id,
+        current_status
+    )
 
-    plate_valida = 'BEE4R2P' # Pegar do banco baseado no id do spot e dia da semana
-    
-    is_valid = distancia_ponderada(plate_valida, plate['plate'])
+    return Response(status_code=202)
 
-    if (is_valid['similaridade_pct'] > 60):
-        await SpotService.update_status(id, 'OCUPADO')
-        alert = False
-    else:
-        await SpotService.update_status(id, 'OCUPADO','OCUPADO') 
-        alert = True
-
-
-    disconnected = []
-    for connection in connections:
-        try:
-            await connection.send_json({
-                "plate_ocr": plate['plate'],
-                "plate_db": plate_valida,
-                "status": status.upper(),
-                "id": id,
-                "is_alert": alert,
-                "valid": is_valid,
-                "image_url": f"/plate/last_picture/{id}",
-                "last_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-        except Exception:
-            disconnected.append(connection)
-
-    
-    for dc in disconnected:
-        if dc in connections:
-            connections.remove(dc)
-
-
-    return Response(status_code=204)
-
-@router.post("/take_picture/{spot_id}/{command}")
-def enviar_comando(spot_id: str, command: str):
-    topic = f"api_vision/spot/{spot_id}"
-    mqttc.publish(topic, command)
-    
-    return {"status": "ok", "topico": topic, "comando": command}
+@router.post("/take_picture/{spot_id}")
+def take_picture(spot_id: str):
+    topic = f"camera/{spot_id}"
+    mqttc.publish(topic, "picture")
+    return {"status": "ok", "message": f"Comando para tirar foto enviado para o tópico {topic}."}
 
 @router.get("/last_picture/{spot_id}")
 async def get_last_picture(spot_id: str):
@@ -143,3 +201,13 @@ async def get_last_picture_info(spot_id: str):
         "filename": last_file,
         "timestamp": datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
     }
+
+
+@router.post("/ignore_alert/{spot_id}")
+async def ignore_alert(spot_id: int):
+    spot = await Spot.get_or_none(id=spot_id)
+    if spot:
+        spot.alert_status = False
+        await spot.save()
+    
+    return {"status": "ok", "alert_status": False}

@@ -14,8 +14,6 @@ class DeviceCreate(DeviceBase):
     onecode: Optional[str] = Field(None, description="Novo identificador de chip")
     topic_subscribe: str = Field(None, description="Tópico MQTT para assinatura")
 
-
-
 class DeviceUpdate(BaseModel):
     """Schema usado para atualização parcial (PATCH) do dispositivo."""
     spot_id: Optional[int] = Field(None, description="Novo ID da vaga associada")
