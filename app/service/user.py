@@ -22,7 +22,9 @@ class UserService:
         return usuario
 
     @staticmethod
-    async def atualizar(usuario_id: int, usuario_data: UsuarioUpdate) -> Optional[Usuario]:
+    async def atualizar(
+        usuario_id: int, usuario_data: UsuarioUpdate
+    ) -> Optional[Usuario]:
         usuario = await UserService.buscar_por_id(usuario_id)
         if not usuario:
             return None

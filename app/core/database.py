@@ -1,6 +1,6 @@
 from tortoise import Tortoise
 
-DATABASE_URL = "mysql://root:admin@localhost:3306/DOUGLASTESTE"
+DATABASE_URL = "mysql://appuser:apppass@localhost:3306/appdb"
 
 TORTOISE_ORM = {
     "connections": {"default": DATABASE_URL},

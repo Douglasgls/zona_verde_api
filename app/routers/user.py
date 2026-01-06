@@ -1,14 +1,13 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import List
 from app.schemas.user import UsuarioCreate, UsuarioUpdate, UsuarioOut
-from app.service.user import UserService 
+from app.service.user import UserService
 
 router = APIRouter(
     prefix="/user",
     tags=["user"],
     responses={404: {"description": "Not found"}},
 )
-
 
 
 @router.get("/", response_model=List[UsuarioOut])

@@ -1,10 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
-from app.models.spot import (
-    SpotState,
-    SpotCurrentState,
-    SpotAlertStatus
-)
+from app.models.spot import SpotState, SpotCurrentState, SpotAlertStatus
 
 
 class SpotBase(BaseModel):

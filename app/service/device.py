@@ -3,6 +3,7 @@ from app.models.device import Device
 from app.schemas.device import DeviceCreate, DeviceUpdate
 from app.models.spot import Spot
 
+
 class DeviceService:
     """Service layer para operações CRUD de dispositivos."""
 
@@ -23,10 +24,10 @@ class DeviceService:
 
         data_dict["onecode"] = str(data_dict["onecode"]).upper()
 
-        spot_id = data_dict.pop("spot_id") 
+        spot_id = data_dict.pop("spot_id")
         spot_obj = await Spot.get(id=spot_id)
 
-        data_dict["spot"] = spot_obj 
+        data_dict["spot"] = spot_obj
 
         device = await Device.create(**data_dict)
         return device

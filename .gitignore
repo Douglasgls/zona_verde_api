@@ -10,7 +10,7 @@ __pycache__/
 *$py.class
 /uploads
 /assets
-
+/debug
 # C extensions
 *.so
 
@@ -180,3 +180,4 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 # Generated using ignr.py - github.com/Antrikshy/ignr.py
+app/core/database.py

@@ -1,6 +1,6 @@
 from tortoise import fields
 from tortoise.models import Model
-from enum import Enum
+
 
 class Device(Model):
     id = fields.IntField(pk=True)

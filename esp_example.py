@@ -8,11 +8,12 @@ PORT = 1883
 TOPIC = "camera/01"
 
 IMAGENS = ["teste_image.png", "teste_image2.png"]
-last_image = None  
+last_image = None
 
 # --------------------------
 # FUNÇÕES
 # --------------------------
+
 
 def enviar_imagem(imagem_path, spot_id, status):
     try:
@@ -27,10 +28,8 @@ def enviar_imagem(imagem_path, spot_id, status):
 
         response = requests.post(
             "http://localhost:8000/api/plate/validate/",
-            files={
-                "file": ("esp32_simulada.jpg", buffer, "image/jpeg")
-            },
-            data={"id": spot_id, "status": status}
+            files={"file": ("esp32_simulada.jpg", buffer, "image/jpeg")},
+            data={"id": spot_id, "status": status},
         )
 
         print("Resposta:", response.status_code, response.text)
@@ -54,6 +53,7 @@ def fluxo_manual(imagem_path):
 # --------------------------
 # MQTT CALLBACKS
 # --------------------------
+
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -84,11 +84,7 @@ def on_message(client, userdata, msg):
     modo = input("Modo automático (a) ou manual (m)? ").strip().lower()
 
     if modo == "a":
-        enviar_imagem(
-            imagem_path=choice_image,
-            spot_id="01",
-            status="MANUAL"
-        )
+        enviar_imagem(imagem_path=choice_image, spot_id="01", status="MANUAL")
     else:
         fluxo_manual(choice_image)
 

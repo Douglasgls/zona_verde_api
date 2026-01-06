@@ -25,11 +25,13 @@ class ReservationService:
         """Cria uma nova reserva."""
         reservation = await Reservation.create(**data.dict())
         spot_update = SpotUpdate(status="RESERVADO")
-        await SpotService.update(data.spot_id, spot_update) 
+        await SpotService.update(data.spot_id, spot_update)
         return reservation
 
     @staticmethod
-    async def update(reservation_id: int, data: ReservationUpdate) -> Optional[Reservation]:
+    async def update(
+        reservation_id: int, data: ReservationUpdate
+    ) -> Optional[Reservation]:
         """Atualiza os dados de uma reserva existente."""
         reservation = await Reservation.get_or_none(id=reservation_id)
         if not reservation:

@@ -1,6 +1,5 @@
 from tortoise import fields
 from tortoise.models import Model
-from enum import Enum
 
 
 class Reservation(Model):
@@ -8,7 +7,7 @@ class Reservation(Model):
     spot = fields.ForeignKeyField("models.Spot", related_name="reservations")
     client = fields.ForeignKeyField("models.Client", related_name="reservations")
     day = fields.DateField()
-    
+
     class Meta:
         table = "reservas"
         ordering = ["day"]

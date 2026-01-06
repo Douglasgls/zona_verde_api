@@ -17,10 +17,7 @@ class SpotService:
     @staticmethod
     async def create(data: SpotCreate) -> Spot:
         # Sempre nasce LIVRE administrativamente e fisicamente
-        spot = await Spot.create(
-            number=data.number,
-            sector=data.sector
-        )
+        spot = await Spot.create(number=data.number, sector=data.sector)
         return spot
 
     @staticmethod
@@ -43,19 +40,15 @@ class SpotService:
     @staticmethod
     async def get_expected_plate(spot_id: int) -> Optional[str]:
         reservation = (
-            await Reservation
-            .filter(spot_id=spot_id)
-            .prefetch_related("client")
-            .first()
+            await Reservation.filter(spot_id=spot_id).prefetch_related("client").first()
         )
 
         if reservation and reservation.client:
             return reservation.client.plate
 
         return None
-    
+
     @staticmethod
     async def is_reserved(spot_id: int) -> bool:
         reservation = await Reservation.filter(spot_id=spot_id).first()
         return reservation is not None
-    

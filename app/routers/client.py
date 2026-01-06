@@ -9,9 +9,11 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 @router.get("/", response_model=List[ClientOut])
 async def list_clients():
     return await ClientService.list_all()
+
 
 @router.get("/{client_id}", response_model=ClientOut)
 async def get_client(client_id: int):
@@ -20,9 +22,11 @@ async def get_client(client_id: int):
         raise HTTPException(status_code=404, detail="Client not found")
     return client
 
+
 @router.post("/", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 async def create_client(client: ClientCreate):
     return await ClientService.create(client)
+
 
 @router.patch("/{client_id}", response_model=ClientOut)
 async def update_client(client_id: int, data: ClientUpdate):
@@ -30,6 +34,7 @@ async def update_client(client_id: int, data: ClientUpdate):
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     return client
+
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_client(client_id: int):

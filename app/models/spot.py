@@ -26,21 +26,16 @@ class Spot(Model):
     sector = fields.CharField(max_length=50, null=True)
 
     # Regra administrativa
-    status = fields.CharEnumField(
-        enum_type=SpotState,
-        default=SpotState.EMPTY
-    )
+    status = fields.CharEnumField(enum_type=SpotState, default=SpotState.EMPTY)
 
     # Estado físico
     current_status = fields.CharEnumField(
-        enum_type=SpotCurrentState,
-        default=SpotCurrentState.EMPTY
+        enum_type=SpotCurrentState, default=SpotCurrentState.EMPTY
     )
 
     # Alerta
     alert_status = fields.CharEnumField(
-        enum_type=SpotAlertStatus,
-        default=SpotAlertStatus.NONE
+        enum_type=SpotAlertStatus, default=SpotAlertStatus.NONE
     )
 
     class Meta:
