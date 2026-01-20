@@ -12,6 +12,7 @@ TORTOISE_ORM = {
                 "app.models.spot",
                 "app.models.device",
                 "app.models.reservation",
+                "app.models.assignment",
             ],
             "default_connection": "default",
         },

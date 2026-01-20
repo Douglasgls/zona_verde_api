@@ -25,6 +25,7 @@ from enum import Enum
 from app.schemas.spot import SpotUpdate, SpotState, SpotAlertStatus
 from concurrent.futures import ThreadPoolExecutor
 from app.models.spot import Spot
+from app.service.device import DeviceService
 
 
 connections = []
@@ -105,8 +106,6 @@ async def process_ocr_and_notify(file_content: bytes, spot_id: str, status: Spot
 
     await SpotService.update(spot_id, data=SpotUpdate(alert_status=alert_status))
 
-    print("AQUI", comparison)
-
     payload = {
         "plate_ocr": plate_detected,
         "plate_db": expected_plate,
@@ -126,7 +125,7 @@ async def process_ocr_and_notify(file_content: bytes, spot_id: str, status: Spot
 async def validate_plate_image(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    id: str = Form(...),
+    onecode: str = Form(...),
     status: str = Form(...),
 ):
     # if not file.content_type.startswith("image/"):
@@ -137,18 +136,22 @@ async def validate_plate_image(
     except ValueError:
         raise HTTPException(status_code=400, detail="Status inválido.")
     
-    spot = await SpotService.get_by_id(int(id))
-
+    spot = await DeviceService.get_spot_by_onecode(onecode)
+    
     if not spot:
         raise HTTPException(status_code=404, detail="Vaga não encontrada.")
+    
+    
+
+    spot_id = str(spot.id)
 
 
     if spot.status != SpotState.RESERVED:
-        await SpotService.update(id, SpotUpdate(current_status=new_status.value))
+        await SpotService.update(spot_id, SpotUpdate(current_status=new_status.value))
 
         await broadcast_to_websockets(
             {
-                "id": id,
+                "id": spot_id,
                 "current_status": new_status.value,
                 "message": "Status atualizado sem validação de reserva.",
             },
@@ -157,19 +160,23 @@ async def validate_plate_image(
 
         return Response(status_code=202)
 
-    await SpotService.update(id, SpotUpdate(current_status=new_status.value))
+    await SpotService.update(spot_id, SpotUpdate(current_status=new_status.value))
 
     file_content = await file.read()
     print(f"Tamanho do arquivo recebido: {len(file_content)} bytes")
 
-    background_tasks.add_task(process_ocr_and_notify, file_content, id, new_status)
+    background_tasks.add_task(process_ocr_and_notify, file_content, spot_id, new_status)
 
     return Response(status_code=202)
 
 
-@router.post("/take_picture/{spot_id}")
-def take_picture(spot_id: str):
-    topic = f"camera/{spot_id}"
+@router.post("/take_picture/{onecode}")
+async def take_picture(onecode: str):
+    device = await DeviceService.get_device_by_onecode(onecode)
+    if not device:
+        raise HTTPException(status_code=404, detail="Dispositivo não encontrado.")
+
+    topic = device.topic_subscribe
     mqttc.publish(topic, "picture")
     return {
         "status": "ok",

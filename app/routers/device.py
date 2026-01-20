@@ -14,7 +14,6 @@ router = APIRouter(
 async def list_devices():
     return await DeviceService.list_all()
 
-
 @router.get("/{device_id}", response_model=DeviceOut)
 async def get_device(device_id: int):
     device = await DeviceService.get_by_id(device_id)
@@ -42,3 +41,17 @@ async def delete_device(device_id: int):
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
     return None
+
+@router.get("/by_onecode/{onecode}", response_model=DeviceOut)
+async def get_device_by_onecode(onecode: str):
+    device = await DeviceService.get_device_by_onecode(onecode)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+@router.get("/by_spot/{spot_id}", response_model=DeviceOut)
+async def get_device_by_spot(spot_id: int):
+    device = await DeviceService.get_device_by_spot(spot_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device

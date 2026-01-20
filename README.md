@@ -76,3 +76,5 @@ Dentro a pasta core do projeto altere a URL do banco de dados no arquivo databas
 ```bash
     poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+# Cria banco de dados appdb no container docker
+docker exec -it 1e06bf3670d1 mysql -u root -p -e "CREATE DATABASE appdb;"
