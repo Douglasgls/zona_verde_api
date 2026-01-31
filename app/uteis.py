@@ -8,6 +8,7 @@ import easyocr
 from PIL import Image
 from datetime import datetime
 from fastapi.websockets import WebSocket
+from app.mqtt_client import mqttc as mqtt_client
 from app.models.spot import Spot
 from typing import Dict, Any
 from thefuzz import fuzz
@@ -168,6 +169,7 @@ async def broadcast_to_websockets(message: dict, connections: list):
 
 async def send_initial_state(websocket: WebSocket):
     spots = await Spot.all()
+    payload = {}
 
     for spot in spots:
         payload = {
@@ -180,3 +182,20 @@ async def send_initial_state(websocket: WebSocket):
     await websocket.send_json({"type": "INITIAL_STATE", "data": payload})
 
     print("WebSocket enviado com sucesso.")
+
+
+
+async def send_message_to_mqtt(message: str,topic: str):
+    """
+    Envia mensagem para o broker MQTT.
+    """
+    try:
+        if mqtt_client.is_connected():
+            topic = topic
+            payload = message
+            mqtt_client.publish(topic, str(payload))
+            print(f"Mensagem MQTT enviada para {topic}: {payload}")
+        else:
+            print("Cliente MQTT não está conectado.")
+    except ImportError:
+        print("MQTT Client não está disponível.")

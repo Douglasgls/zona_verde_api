@@ -26,6 +26,8 @@ from app.schemas.spot import SpotUpdate, SpotState, SpotAlertStatus
 from concurrent.futures import ThreadPoolExecutor
 from app.models.spot import Spot
 from app.service.device import DeviceService
+from app.models.device import Device
+from app.uteis import send_message_to_mqtt
 
 
 connections = []
@@ -106,6 +108,24 @@ async def process_ocr_and_notify(file_content: bytes, spot_id: str, status: Spot
 
     await SpotService.update(spot_id, data=SpotUpdate(alert_status=alert_status))
 
+    if is_alert_condition:
+        try:
+            device: Device = await DeviceService.get_device_by_spot(int(spot_id))
+            if device and device.topic_subscribe:
+                await send_message_to_mqtt("ALERTA_ON", device.topic_subscribe)
+                print(f"MQTT: ALERTA_ON enviado para {device.topic_subscribe}")
+        except Exception as e:
+            print(f"Erro ao enviar ALERTA_ON via MQTT: {e}")
+
+    # if not is_alert_condition:
+    #     try:
+    #         device: Device = await DeviceService.get_device_by_spot(int(spot_id))
+    #         if device and device.topic_subscribe:
+    #             await send_message_to_mqtt("OCUPADO", device.topic_subscribe)
+    #             print(f"MQTT: OCUPADO enviado para {device.topic_subscribe}")
+    #     except Exception as e:
+    #         print(f"Erro ao enviar OCUPADO via MQTT: {e}")
+
     payload = {
         "plate_ocr": plate_detected,
         "plate_db": expected_plate,
@@ -145,6 +165,15 @@ async def validate_plate_image(
 
     spot_id = str(spot.id)
 
+    if new_status == SpotStatus.LIVRE:
+        try:
+            device: Device = await DeviceService.get_device_by_spot(int(spot_id))
+            if device and device.topic_subscribe:
+                await send_message_to_mqtt("ALERTA_OFF", device.topic_subscribe)
+                print(f"MQTT: ALERTA_OFF enviado para {device.topic_subscribe}")
+        except Exception as e:
+            print(f"Erro ao enviar ALERTA_ON via MQTT: {e}")
+
 
     if spot.status != SpotState.RESERVED:
         await SpotService.update(spot_id, SpotUpdate(current_status=new_status.value))
@@ -181,6 +210,19 @@ async def take_picture(onecode: str):
     return {
         "status": "ok",
         "message": f"Comando para tirar foto enviado para o tópico {topic}.",
+    }
+
+@router.post("/send_mqtt/{onecode}")
+async def send_mqtt_message(onecode: str, message: str):
+    device = await DeviceService.get_device_by_onecode(onecode)
+    if not device:
+        raise HTTPException(status_code=404, detail="Dispositivo não encontrado.")
+
+    topic = device.topic_subscribe
+    await send_message_to_mqtt(message, topic)
+    return {
+        "status": "ok",
+        "message": f"Mensagem enviada para o tópico {topic}.",
     }
 
 
@@ -241,11 +283,26 @@ async def get_last_picture_info(spot_id: str):
     }
 
 
+# @router.post("/ignore_alert/{spot_id}")
+# async def ignore_alert(spot_id: int):
+#     spot = await Spot.get_or_none(id=spot_id)
+#     if spot:
+#         spot.alert_status = False
+#         await spot.save()
+
+#     return {"status": "ok", "alert_status": False}
+
 @router.post("/ignore_alert/{spot_id}")
 async def ignore_alert(spot_id: int):
     spot = await Spot.get_or_none(id=spot_id)
     if spot:
-        spot.alert_status = False
+        spot.alert_status = SpotAlertStatus.IGNORED
         await spot.save()
-
+        try:
+            device: Device = await DeviceService.get_device_by_spot(spot_id)
+            if device and device.topic_subscribe:
+                await send_message_to_mqtt("ALERTA_OFF", device.topic_subscribe)
+        except Exception as e:
+            print(f"Erro ao enviar ALERTA_OFF via MQTT, {device.topic_subscribe}: {e}")
     return {"status": "ok", "alert_status": False}
+
