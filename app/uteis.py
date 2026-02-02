@@ -16,25 +16,6 @@ from thefuzz import fuzz
 # ============================================================
 # CONFIGURAÇÕES E CONSTANTES
 # ============================================================
-TAMANHO_PLACA = 7
-MAX_PONTUACAO_PERFEITA = 105  # 70 base + (7 posições * 5 pontos de bônus)
-BLACKLIST_OCR = ["BRASIL", "MERCOSUL", "MARCOSUL", "MERCOSUR", "PR", "BR"]
-REGEX_PLACA = r"[A-Z]{3}[0-9][A-Z0-9][0-9]{2}"
-
-CONFUSOES_OCR = {
-    "B": ["8"],
-    "8": ["B"],
-    "D": ["0", "O", "Q"],
-    "0": ["D", "O", "Q", "U"],
-    "O": ["D", "0", "Q"],
-    "I": ["1", "T"],
-    "1": ["I", "T"],
-    "P": ["R"],
-    "Z": ["2"],
-    "2": ["Z"],
-    "S": ["5"],
-    "5": ["S"],
-}
 
 READER = easyocr.Reader(["pt"], gpu=False, verbose=False)
 
@@ -50,14 +31,12 @@ def limpar_placa(texto: str) -> str:
     """Remove caracteres especiais e converte para maiúsculo."""
     return re.sub(r"[^A-Z0-9]", "", str(texto).upper())
 
-
 def normalizar_ocr(texto: str) -> str:
     """
     Substitui caracteres visualmente semelhantes por um padrão comum.
     Ex: Transforma tanto 'B' quanto '8' em 'B' para a comparação não falhar.
     """
     return texto.translate(MAPA_AMBIGUIDADE)
-
 
 def calcular_similaridade(
     placa_valid: str, placa_ocr: str, limiar_aceite: int = 85
@@ -72,18 +51,14 @@ def calcular_similaridade(
     if not o_clean:
         return {"score": 0, "aprovado": False, "status": "SEM_LEITURA"}
 
-    # 1. Comparação Bruta (Literal)
     score_bruto = fuzz.ratio(v_clean, o_clean)
 
-    # 2. Comparação Flexível (Normalizando confusões comuns de OCR)
-    # Se a bruta for baixa, tentamos ver se normalizando melhora (ex: B vs 8)
     score_final = score_bruto
     if score_bruto < 100:
         v_norm = normalizar_ocr(v_clean)
         o_norm = normalizar_ocr(o_clean)
         score_norm = fuzz.ratio(v_norm, o_norm)
 
-        # Usamos o maior score entre o literal e o normalizado
         score_final = max(score_bruto, score_norm)
 
     return {
@@ -106,9 +81,7 @@ def get_plate_text(file_bytes: bytes) -> dict:
     """
     try:
         os.makedirs("debug", exist_ok=True)
-
         img_pil = Image.open(io.BytesIO(file_bytes)).convert("RGB")
-        img_pil = img_pil.rotate(-90, expand=True)
         img_np = np.array(img_pil)
 
         gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
@@ -120,6 +93,9 @@ def get_plate_text(file_bytes: bytes) -> dict:
 
         results = READER.readtext(blurred, detail=1)
 
+        if not results:
+            return {"plate": "", "confidence": 0}
+        
         best_match = max(results, key=lambda x: x[2])
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -146,7 +122,7 @@ def save_image_bytes_as_png(file: bytes, spot_id: str) -> str:
     folder = f"uploads/vaga-{spot_id}"
     os.makedirs(folder, exist_ok=True)
     try:
-        image = Image.open(io.BytesIO(file)).convert("RGB").rotate(-90, expand=True)
+        image = Image.open(io.BytesIO(file)).convert("RGB")
         filename = f"{spot_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
         path = os.path.join(folder, filename)
         image.save(path, "PNG")
@@ -154,7 +130,6 @@ def save_image_bytes_as_png(file: bytes, spot_id: str) -> str:
     except Exception as e:
         print(f"Erro ao salvar: {e}")
         raise
-
 
 async def broadcast_to_websockets(message: dict, connections: list):
     """
@@ -165,7 +140,6 @@ async def broadcast_to_websockets(message: dict, connections: list):
     print(connections)
     tasks = [conn.send_json(message) for conn in connections]
     await asyncio.gather(*tasks, return_exceptions=True)
-
 
 async def send_initial_state(websocket: WebSocket):
     spots = await Spot.all()
@@ -182,8 +156,6 @@ async def send_initial_state(websocket: WebSocket):
     await websocket.send_json({"type": "INITIAL_STATE", "data": payload})
 
     print("WebSocket enviado com sucesso.")
-
-
 
 async def send_message_to_mqtt(message: str,topic: str):
     """
