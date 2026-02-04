@@ -11,6 +11,7 @@ from fastapi.websockets import WebSocket
 from app.mqtt_client import mqttc as mqtt_client
 from app.models.spot import Spot
 from typing import Dict, Any
+from ultralytics import YOLO
 from thefuzz import fuzz
 
 # ============================================================
@@ -18,6 +19,14 @@ from thefuzz import fuzz
 # ============================================================
 
 READER = easyocr.Reader(["pt"], gpu=False, verbose=False)
+ALLOW_LIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+PLATE_REGEX = re.compile(r"[A-Z]{3}[0-9][A-Z][0-9]{2}")
+
+try:
+    MODELO_YOLO = YOLO("license_plate_detector.pt")
+except Exception as e:
+    print(f"ERRO CRÍTICO: Não foi possível carregar o modelo YOLO. {e}")
+
 
 # ============================================================
 # LÓGICA DE COMPARAÇÃO (SIMILARIDADE DE PLACAS)
@@ -77,36 +86,77 @@ def calcular_similaridade(
 # ============================================================
 def get_plate_text(file_bytes: bytes) -> dict:
     """
-    Aplica filtros de imagem e extrai o texto da placa via EasyOCR.
+    Aplica recorte estratégico (Topo + Esquerda) para remover 'BRASIL' e 'BR'.
     """
     try:
         os.makedirs("debug", exist_ok=True)
         img_pil = Image.open(io.BytesIO(file_bytes)).convert("RGB")
         img_np = np.array(img_pil)
 
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+        results = MODELO_YOLO.predict(img_np, imgsz=640, conf=0.25, verbose=False)
+
+        if not results or len(results[0].boxes) == 0:
+            return {"plate": "", "confidence": 0}
+        
+        box = max(results[0].boxes, key=lambda b: float(b.conf))
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+        h_orig, w_orig, _ = img_np.shape
+        pad = 10
+        crop_bgr = img_np[max(0, y1-pad):min(h_orig, y2+pad), max(0, x1-pad):min(w_orig, x2+pad)]
+
+        h_crop, w_crop, _ = crop_bgr.shape
+        
+        crop_bgr = crop_bgr[
+            int(h_crop * 0.25) : h_crop, 
+            int(w_crop * 0.07) : w_crop
+        ]
+
+        gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LANCZOS4)
 
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         contrast = clahe.apply(gray)
         blurred = cv2.GaussianBlur(contrast, (5, 5), 0)
 
-        results = READER.readtext(blurred, detail=1)
+        results = READER.readtext(
+            blurred,
+            detail=1,
+            allowlist=ALLOW_LIST,
+            paragraph=False,
+            text_threshold=0.6,
+            low_text=0.4,
+            contrast_ths=0.1,
+            adjust_contrast=0.8
+        )
 
         if not results:
             return {"plate": "", "confidence": 0}
         
-        best_match = max(results, key=lambda x: x[2])
+        valid_results = []
 
+        for box, text, conf in results:
+            clean_text = text.upper().replace(" ", "")
+            
+            if clean_text in ["BR", "BRASIL", "MERCOSUL"]:
+                continue
+            
+            if 'PLATE_REGEX' in globals() and PLATE_REGEX.fullmatch(clean_text):
+                 valid_results.append((clean_text, conf))
+            elif len(clean_text) >= 7: 
+                 valid_results.append((clean_text, conf))
+
+        if not valid_results:
+            return {"plate": "", "confidence": 0}
+
+        best_text, best_conf = max(valid_results, key=lambda x: x[1])
+        
+        # Debug
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        debug_name = f"debug/{timestamp}.png"
-        cv2.imwrite(debug_name, blurred)
+        cv2.imwrite(f"debug/ocr_processada_{timestamp}.png", blurred)
 
-        return {
-            "plate": best_match[1].upper().replace(" ", ""),
-            "confidence": round(best_match[2], 2) if best_match else 0,
-        }
-
+        return {"plate": best_text, "confidence": float(best_conf)}
+    
     except Exception as e:
         print(f"Erro no processamento OCR: {e}")
         return {"plate": "ERRO", "confidence": 0}

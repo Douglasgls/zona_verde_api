@@ -90,8 +90,10 @@ async def process_ocr_and_notify(file_content: bytes, spot_id: str, status: Spot
             executor, calcular_similaridade, expected_plate, plate_detected
         )
 
-        similarity = comparison["similaridade_pct"]
-
+        if not comparison:
+            similarity = 0
+        else:
+            similarity = comparison.get("similaridade_pct", 0)
 
         print(f"Placa: {plate_detected} | Similaridade: {similarity}%")
 
