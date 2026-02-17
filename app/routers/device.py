@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
 from typing import List
-from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceOut
+
+from fastapi import APIRouter, HTTPException, status
+
+from app.schemas.device import DeviceCreate, DeviceOut, DeviceUpdate
 from app.service.device import DeviceService
 
 router = APIRouter(
@@ -13,6 +15,23 @@ router = APIRouter(
 @router.get("/", response_model=List[DeviceOut])
 async def list_devices():
     return await DeviceService.list_all()
+
+
+@router.get("/by_onecode/{onecode}", response_model=DeviceOut)
+async def get_device_by_onecode(onecode: str):
+    device = await DeviceService.get_device_by_onecode(onecode)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+
+@router.get("/by_spot/{spot_id}", response_model=DeviceOut)
+async def get_device_by_spot(spot_id: int):
+    device = await DeviceService.get_device_by_spot(spot_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
 
 @router.get("/{device_id}", response_model=DeviceOut)
 async def get_device(device_id: int):
@@ -41,17 +60,3 @@ async def delete_device(device_id: int):
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
     return None
-
-@router.get("/by_onecode/{onecode}", response_model=DeviceOut)
-async def get_device_by_onecode(onecode: str):
-    device = await DeviceService.get_device_by_onecode(onecode)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    return device
-
-@router.get("/by_spot/{spot_id}", response_model=DeviceOut)
-async def get_device_by_spot(spot_id: int):
-    device = await DeviceService.get_device_by_spot(spot_id)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    return device
