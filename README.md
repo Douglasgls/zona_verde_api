@@ -1,80 +1,100 @@
-# ESP-PLATE-VISION
+# Zona Verde API
 
-API para detecção e validação de placas de veículos no Brasil
+API responsável pelo backend do ecossistema Zona Verde. O projeto gerencia vagas, reservas, clientes, usuários e dispositivos IoT, além de processar imagens para leitura de placas e integração com MQTT.
 
-O objetivo principal desta API é fornecer uma solução completa de detecção e validação de placas de veículos, incluindo:
+## Objetivo
 
-- Detecção de placas de veículos
-- Validação de placas de veículos
-- Gerenciamento de clientes
-- Gerenciamento de dispositivos
-- Gerenciamento de reservas de vagas de estacionamento
+A API centraliza a lógica de negócio do sistema de estacionamento inteligente, oferecendo:
 
-# Requesitos mínimos:
-- Python 3.8 ou superior
+- CRUD de usuários, clientes, vagas, dispositivos e reservas
+- Atualização de status de vagas com regras de consistência
+- Integração MQTT para notificação de dispositivos ESP
+- Endpoints para processamento e validação de placas de veículos
+- Suporte a WebSocket para atualização de eventos em tempo real
+
+## Tecnologias principais
+
+- Python 3.12+
 - FastAPI
-- Poetry 
+- Tortoise ORM
 - MySQL
-- Mosquitto
+- MQTT (Mosquitto)
+- Ultralytics, EasyOCR, PaddleOCR e Tesseract para OCR/detecção
 
+## Estrutura do projeto
 
-# Banco de dados MySQL e Mosquitto
-
-Para executar o programa, é necessário ter um banco de dados MySQL e um servidor Mosquitto rodando em um computador.
-
-# Banco de dados MySQL
-
-```bash
-    docker run --name mysql -e MYSQL_ROOT_PASSWORD=root -p 3306:3306 -d mysql
-```
-# Startando o servidor MySQL
-
-Dentro a pasta core do projeto altere a URL do banco de dados no arquivo database.py
-
-```bash
-    docker start #ID do container
+```text
+app/
+  core/          # configuração do banco
+  models/        # entidades do domínio
+  routers/       # endpoints HTTP/WebSocket
+  schemas/       # contratos de entrada/saída
+  service/       # regras de negócio
+  assets/        # imagens auxiliares
 ```
 
-# Servidor Mosquitto
+## Pré-requisitos
+
+- Python 3.12 ou superior
+- Poetry
+- Docker (recomendado para MySQL e Mosquitto)
+
+## Configuração rápida
+
+### 1) Clonar e instalar dependências
 
 ```bash
-    docker run --name mosquitto -p 1883:1883 -d eclipse-mosquitto
+git clone <url-do-repositorio>
+cd zona_verde_api
+poetry install
 ```
 
-# Startando o servidor Mosquitto
+### 2) Subir MySQL
 
 ```bash
-    docker start #ID do container
+docker run --name mysql-zona-verde -e MYSQL_ROOT_PASSWORD=root -p 3306:3306 -d mysql
 ```
 
-# Instalação
+Criar o banco `appdb`:
 
 ```bash
-    git clone https://github.com/Douglasgls/esp-plate-vision.git
-    cd esp-plate-vision
+docker exec -it mysql-zona-verde mysql -u root -proot -e "CREATE DATABASE appdb;"
 ```
 
-# criando um ambiente virtual e ativando
+### 3) Subir broker MQTT
 
 ```bash
-    python3 -m venv env
-
-    source env/bin/activate
+docker run --name mosquitto-zona-verde -p 1883:1883 -d eclipse-mosquitto
 ```
 
-# Instalando as dependências
+### 4) Ajustar conexão com banco
+
+Revise `app/core/database.py` e ajuste a variável `DATABASE_URL` conforme seu ambiente.
+
+### 5) Executar a API
 
 ```bash
-    poetry install
-    or
-    poetry update
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+## Endpoints base
 
-# Executando a API
+Com a API rodando, a documentação interativa estará disponível em:
 
-```bash
-    poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-# Cria banco de dados appdb no container docker
-docker exec -it 1e06bf3670d1 mysql -u root -p -e "CREATE DATABASE appdb;"
+- Swagger: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+Os endpoints são expostos sob o prefixo `/api`.
+
+## Projetos complementares
+
+Para uma experiência completa do ecossistema Zona Verde, consulte também:
+
+- zona_verde_app (aplicação cliente)
+- zona_verde_esp (firmware/dispositivo embarcado)
+
+## Observações
+
+- O projeto depende de serviços externos (MySQL e MQTT).
+- O processamento de imagem/OCR pode exigir bibliotecas nativas no sistema operacional.
+- As entidades são criadas automaticamente pelo Tortoise ORM ao iniciar a aplicação.

@@ -1,25 +1,21 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from tortoise import Tortoise
 
-from contextlib import asynccontextmanager
 from app.core.database import init_db
-
 from app.models.user import User
-
-from app.routers.plate import router as plate_router
-
-from app.routers.user import router as user_router
-
-from app.routers.client import router as client_router
-
-from app.routers.spot import router as spot_router
-
 from app.routers.device import router as device_router
-
+from app.routers.client import router as client_router
+from app.routers.plate import router as plate_router
 from app.routers.reservation import router as reservation_router
-
+from app.routers.spot import router as spot_router
+from app.routers.user import router as user_router
 from app.mqtt_client import mqttc, BROKER_HOST, BROKER_PORT
+
+
+API_PREFIX = "/api"
 
 
 @asynccontextmanager
@@ -57,31 +53,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [
-    "http://localhost:5173",  # exemplo: Vite em desenvolvimento
-    "http://localhost:3000",  # exemplo: React CRA
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # URLs permitidas
-    allow_credentials=True,  # se quiser permitir cookies/autenticação
-    allow_methods=["*"],  # métodos permitidos (GET, POST, etc)
-    allow_headers=["*"],  # headers permitidos
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Routers
-app.include_router(prefix="/api", router=plate_router)
-
-app.include_router(prefix="/api", router=user_router)
-
-app.include_router(prefix="/api", router=client_router)
-
-app.include_router(prefix="/api", router=spot_router)
-
-app.include_router(prefix="/api", router=device_router)
-
-app.include_router(prefix="/api", router=reservation_router)
+for router in (
+    plate_router,
+    user_router,
+    client_router,
+    spot_router,
+    device_router,
+    reservation_router,
+):
+    app.include_router(prefix=API_PREFIX, router=router)
 
 
 @app.get("/")
